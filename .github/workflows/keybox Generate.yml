@@ -16,22 +16,26 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Install dependencies
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y openssl ssh libssl-dev
+
+    - name: Install Python dependencies
       run: pip install cryptography lxml
 
-    - name: Clone & generate keybox
+    - name: Clone keybox generator & run
       run: |
         git clone https://github.com/LRFP-Team/keyboxGenerator.git
         cd keyboxGenerator
-        # Use the main script (from your logs)
-        python3 keyboxGenerator.py || python3 keyboxGenerator_v2.0.py
         
-        # If scripts need args, check README.md:
-        # python3 keyboxGenerator.py --help
-        
-        # Fallback if no output created
-        [ -f "keybox.xml" ] || {
-          echo "No keybox.xml found, creating template..."
+        # Try both script versions with error handling
+        if python3 keyboxGenerator.py; then
+          echo "✅ keyboxGenerator.py succeeded"
+        elif python3 keyboxGenerator_v2.0.py; then
+          echo "✅ keyboxGenerator_v2.0.py succeeded"
+        else
+          echo "❌ Both scripts failed, creating template"
           cat > keybox.xml << 'EOF'
 <?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
 <KeyBox version="2.0">
@@ -39,24 +43,42 @@ jobs:
   </VerifiedBootKeys>
 </KeyBox>
 EOF
-        }
+        fi
+        
+        # Verify output exists
+        if [ ! -f "keybox.xml" ]; then
+          echo "❌ No keybox.xml generated, exiting"
+          exit 1
+        fi
+        echo "✅ keybox.xml created: $(wc -l < keybox.xml) lines"
+        ls -la keybox.xml
 
-    - name: Encrypt ZIP
+    - name: Create encrypted ZIP
       env:
         ZIP_PASSWORD: ${{ secrets.KEYBOX_ZIP_PASSWORD }}
       run: |
-        zip -P "$ZIP_PASSWORD" keybox-encrypted.zip keyboxGenerator/keybox.xml
-        echo "✅ Encrypted: $(sha256sum keybox-encrypted.zip | cut -d' ' -f1)"
+        if [ -z "$ZIP_PASSWORD" ]; then
+          echo "❌ KEYBOX_ZIP_PASSWORD secret missing"
+          exit 1
+        fi
+        cd keyboxGenerator
+        zip -P "$ZIP_PASSWORD" ../keybox-encrypted.zip keybox.xml
+        cd ..
+        echo "✅ Encrypted ZIP created: $(du -h keybox-encrypted.zip)"
+        echo "SHA256: $(sha256sum keybox-encrypted.zip | cut -d' ' -f1)"
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: keybox-encrypted
         path: keybox-encrypted.zip
+        retention-days: 30
 
     - name: Create release
       if: github.event_name == 'workflow_dispatch'
       uses: softprops/action-gh-release@v2
       with:
         tag_name: v${{ github.run_number }}
+        name: Keybox v${{ github.run_number }}
         files: keybox-encrypted.zip
+        generate_release_notes: true
