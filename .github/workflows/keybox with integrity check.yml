@@ -1,4 +1,4 @@
-name: Generate Encrypted Keybox XML
+name: Generate Encrypted Keybox XML improved
 on:
   workflow_dispatch:
   push:
