@@ -1,0 +1,83 @@
+name: Generate Encrypted Keybox.xml + Check integrity
+on:
+  workflow_dispatch:  # Manual trigger only
+  push:
+    branches: [ main ]
+
+jobs:
+  generate-keybox:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y openssl libssl-dev
+        pip install cryptography lxml
+
+    - name: Generate keybox
+      run: |
+        git clone https://github.com/LRFP-Team/keyboxGenerator.git
+        cd keyboxGenerator
+        python3 keyboxGenerator.py || true
+        ls -la keybox.xml
+
+    - name: Validate Keybox
+      run: |
+        cd keyboxGenerator
+        # Basic cert validation
+        if openssl x509 -in keybox.xml -text -noout 2>/dev/null | grep -q "Android"; then
+          echo "✅ Keybox certs valid"
+        else
+          echo "❌ Invalid keybox certs"
+          exit 1
+        fi
+        echo "SHA256: $(sha256sum keybox.xml | cut -d' ' -f1)"
+        echo "Size: $(du -h keybox.xml)"
+
+    - name: Check Keybox Integrity
+      run: |
+        cd keyboxGenerator
+        git clone https://github.com/SenyxLois/KeyboxCheckerPython.git
+        cd KeyboxCheckerPython
+        pip install -r requirements.txt
+        cd ..
+        python KeyboxCheckerPython/main.py keybox.xml | tee integrity-check.txt
+        if ! grep -q "PASS" integrity-check.txt; then
+          echo "❌ Keybox failed integrity check"
+          exit 1
+        fi
+        echo "✅ Keybox passed integrity validation"
+
+    - name: Encrypt ZIP
+      env:
+        ZIP_PASSWORD: ${{ secrets.KEYBOX_ZIP_PASSWORD }}
+      run: |
+        cd keyboxGenerator
+        zip -P "$ZIP_PASSWORD" ../keybox-encrypted.zip keybox.xml
+        cd ..
+        echo "✅ ZIP SHA256: $(sha256sum keybox-encrypted.zip | cut -d' ' -f1)"
+        echo "✅ ZIP Size: $(du -h keybox-encrypted.zip)"
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: keybox-encrypted
+        path: keybox-encrypted.zip
+        retention-days: 30
+
+    - name: Upload validation logs
+      uses: actions/upload-artifact@v4
+      with:
+        name: keybox-logs
+        path: |
+          keyboxGenerator/integrity-check.txt
+          keyboxGenerator/keybox.xml
+        retention-days: 7
