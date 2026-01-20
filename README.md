@@ -1,5 +1,7 @@
 ## later i will edit readme file properly
 
+###⚠️ need fixes keybox aren't seems strong to pass the device certifications!
+
 ## Thanks & Credits 🎉
 
 **🙏 Huge thanks to:**
