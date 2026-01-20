@@ -1,4 +1,4 @@
-name: Generate Encrypted Keybox XML Improved
+name: Generate Encrypted Keybox XML
 on:
   workflow_dispatch:
   push:
@@ -14,7 +14,7 @@ jobs:
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
+        python-version: "3.11"
 
     - name: Install dependencies
       run: |
@@ -26,24 +26,25 @@ jobs:
       run: |
         git clone https://github.com/LRFP-Team/keyboxGenerator.git
         cd keyboxGenerator
-        python3 keyboxGenerator.py || true
+        # ensure the print(keybox) is commented out in the script!
+        python3 keyboxGenerator.py
 
     - name: Validate Keybox
       run: |
         cd keyboxGenerator
         if [ -f keybox.xml ] && [ $(wc -c < keybox.xml) -gt 2000 ]; then
-          echo "✅ Keybox generated successfully"
+          echo "✔ keybox.xml generated"
           echo "SHA256: $(sha256sum keybox.xml | cut -d' ' -f1)"
         else
-          echo "❌ Keybox generation failed"
+          echo "✖ keybox generation failed"
           exit 1
         fi
 
         grep -A 50 "BEGIN CERTIFICATE" keybox.xml | head -n 50 > cert.pem
-        if openssl x509 -in cert.pem -text -noout 2>/dev/null; then
-          echo "✅ Certificate appears valid"
+        if openssl x509 -in cert.pem -text -noout >/dev/null 2>&1; then
+          echo "✔ certificate parses"
         else
-          echo "⚠️ Certificate check skipped"
+          echo "⚠ certificate check skipped"
         fi
 
     - name: Encrypt ZIP
@@ -54,14 +55,13 @@ jobs:
         zip -P "$ZIP_PASSWORD" ../keybox-encrypted.zip keybox.xml
         cd ..
         echo "ZIP SHA256: $(sha256sum keybox-encrypted.zip | cut -d' ' -f1)"
-        echo "ZIP Size: $(du -h keybox-encrypted.zip)"
 
-    - name: Cleanup plaintext keybox
+    - name: Cleanup plaintext
       run: |
         rm -f keyboxGenerator/keybox.xml
         rm -f keyboxGenerator/cert.pem
 
-    - name: Upload artifacts (encrypted only)
+    - name: Upload encrypted artifact
       uses: actions/upload-artifact@v4
       with:
         name: keybox-encrypted
