@@ -1,0 +1,47 @@
+name: Generate Encrypted Keybox XML
+on:
+  workflow_dispatch:  # Manual trigger only
+  push:
+    branches: [ main ]
+
+jobs:
+  generate-keybox:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y openssl libssl-dev
+        pip install cryptography lxml
+
+    - name: Generate keybox
+      run: |
+        git clone https://github.com/LRFP-Team/keyboxGenerator.git
+        cd keyboxGenerator
+        python3 keyboxGenerator.py || true
+        ls -la keybox.xml
+
+    - name: Encrypt ZIP
+      env:
+        ZIP_PASSWORD: RT6R4Y
+      run: |
+        cd keyboxGenerator
+        zip -P "$ZIP_PASSWORD" ../keybox-encrypted.zip keybox.xml
+        cd ..
+        echo "✅ SHA256: $(sha256sum keybox-encrypted.zip | cut -d' ' -f1)"
+        echo "✅ Size: $(du -h keybox-encrypted.zip)"
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: keybox-encrypted
+        path: keybox-encrypted.zip
+        retention-days: 30
