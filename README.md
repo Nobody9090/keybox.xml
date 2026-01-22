@@ -2,6 +2,8 @@
 
 ### ⚠️ need fixes keybox aren't seems strong to pass the device certifications!
 
+### set action secrets: KEYBOX_ZIP_PASSWORD
+
 ## Thanks & Credits 🎉
 
 **🙏 Huge thanks to:**
